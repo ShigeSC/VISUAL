@@ -6,127 +6,241 @@ local Module = {}
 
 local function createLowGraphics(B)
     local Workspace = game:GetService("Workspace")
-    local LocalPlayer = B.LP or game:GetService("Players").LocalPlayer
     local DisableDecorativeStars = type(B.DisableDecorativeStars) == "function"
         and B.DisableDecorativeStars
         or function() end
+
+    -- Texture-only / non-destructive Low Graphics.
+    -- Keep every garden, plant, tree, model and part in Workspace. We only
+    -- flatten materials/textures and disable decorative VFX/lights. Original
+    -- values are cached so turning Low Graphics OFF can restore them.
+    local originals = setmetatable({}, { __mode = "k" })
+    local descendantAddedConnection = nil
     local cleanupEnabled = false
+    local runId = 0
 
--- ScoopHub cleanup behavior: keep the local player's own garden geometry,
--- but strip its texture/effect layers so trees/plants remain visible as plain
--- colored parts. Other gardens/world visuals still use the original aggressive
--- FPS cleanup. Your plot is detected dynamically from Owner / OwnerUserId.
-local function getCleanupOwnedPlot()
-    local gardens = Workspace:FindFirstChild("Gardens")
-    if not gardens then
-        return nil
-    end
-
-    for _, plot in ipairs(gardens:GetChildren()) do
-        local owner = plot:GetAttribute("Owner")
-        local ownerUserId = plot:GetAttribute("OwnerUserId")
-
-        if tostring(owner or "") == LocalPlayer.Name
-            or tonumber(ownerUserId) == LocalPlayer.UserId then
-            return plot
+    local function remember(object)
+        local state = originals[object]
+        if not state then
+            state = {}
+            originals[object] = state
         end
+        return state
     end
 
-    return nil
-end
+    local function stripVisuals(object)
+        if not cleanupEnabled or not object or not object.Parent then
+            return
+        end
 
-local function isInsideCleanupOwnedPlot(item, ownedPlot)
-    if not item or not ownedPlot then
-        return false
-    end
+        -- Preserve geometry and Color. Only flatten expensive materials.
+        if object:IsA("BasePart") then
+            local state = remember(object)
 
-    return item == ownedPlot or item:IsDescendantOf(ownedPlot)
-end
+            if state.Material == nil then
+                state.Material = object.Material
+            end
+            if state.Reflectance == nil then
+                state.Reflectance = object.Reflectance
+            end
+            if state.MaterialVariantCaptured ~= true then
+                local ok, value = pcall(function()
+                    return object.MaterialVariant
+                end)
+                if ok then
+                    state.MaterialVariant = value
+                end
+                state.MaterialVariantCaptured = true
+            end
 
-local function stripOwnedGardenVisual(item)
-    -- Keep all actual tree/plant parts/models so the user's garden is still
-    -- visible. Only remove texture/effect layers and use SmoothPlastic while
-    -- preserving each part's existing Color for a clean "pure color" look.
-    if item:IsA("BasePart") then
-        pcall(function()
-            item.Material = Enum.Material.SmoothPlastic
-            item.Reflectance = 0
-        end)
-
-        if item:IsA("MeshPart") then
             pcall(function()
-                item.TextureID = ""
+                object.Material = Enum.Material.SmoothPlastic
             end)
+            pcall(function()
+                object.MaterialVariant = ""
+            end)
+            pcall(function()
+                object.Reflectance = 0
+            end)
+
+            if object:IsA("MeshPart") then
+                if state.TextureIDCaptured ~= true then
+                    local ok, value = pcall(function()
+                        return object.TextureID
+                    end)
+                    if ok then
+                        state.TextureID = value
+                    end
+                    state.TextureIDCaptured = true
+                end
+                pcall(function()
+                    object.TextureID = ""
+                end)
+            end
         end
-    elseif item:IsA("SpecialMesh") then
-        pcall(function()
-            item.TextureId = ""
-        end)
-    elseif item:IsA("Texture") or item:IsA("Decal") or item:IsA("SurfaceAppearance")
-        or item:IsA("ParticleEmitter") or item:IsA("Trail") or item:IsA("Beam") then
-        pcall(function() item:Destroy() end)
-    end
-end
 
-local function applyLowCPU()
-    if not cleanupEnabled then return end
+        if object:IsA("Decal") or object:IsA("Texture") then
+            local state = remember(object)
+            if state.Transparency == nil then
+                state.Transparency = object.Transparency
+            end
+            pcall(function()
+                object.Transparency = 1
+            end)
+            return
+        end
 
-    local Lighting = game:GetService("Lighting")
-    local ownedPlot = getCleanupOwnedPlot()
+        if object:IsA("SpecialMesh") then
+            local state = remember(object)
+            if state.TextureIdCaptured ~= true then
+                local ok, value = pcall(function()
+                    return object.TextureId
+                end)
+                if ok then
+                    state.TextureId = value
+                end
+                state.TextureIdCaptured = true
+            end
+            pcall(function()
+                object.TextureId = ""
+            end)
+            return
+        end
 
-    -- Original cleanup: remove heavy plant/tree/decoration/effect objects from
-    -- everywhere EXCEPT the local player's own plot. Their geometry stays.
-    for _, item in ipairs(Workspace:GetDescendants()) do
-        if not isInsideCleanupOwnedPlot(item, ownedPlot) then
-            local nameLower = item.Name:lower()
-            if nameLower:find("plant") or nameLower:find("tree") or nameLower:find("flower")
-                or nameLower:find("bush") or nameLower:find("crop") or nameLower:find("grass")
-                or nameLower:find("vine") or nameLower:find("mushroom") or nameLower:find("visual")
-                or nameLower:find("decoration") or nameLower:find("leaf") or nameLower:find("petals") then
-                pcall(function() item:Destroy() end)
+        if object:IsA("SurfaceAppearance") then
+            local state = remember(object)
+            if state.SurfaceAppearanceCaptured ~= true then
+                pcall(function() state.ColorMap = object.ColorMap end)
+                pcall(function() state.MetalnessMap = object.MetalnessMap end)
+                pcall(function() state.NormalMap = object.NormalMap end)
+                pcall(function() state.RoughnessMap = object.RoughnessMap end)
+                state.SurfaceAppearanceCaptured = true
+            end
+
+            pcall(function() object.ColorMap = "" end)
+            pcall(function() object.MetalnessMap = "" end)
+            pcall(function() object.NormalMap = "" end)
+            pcall(function() object.RoughnessMap = "" end)
+            return
+        end
+
+        -- Decorative effects stay in the hierarchy; they are only disabled.
+        if object:IsA("ParticleEmitter")
+            or object:IsA("Trail")
+            or object:IsA("Beam")
+            or object:IsA("Smoke")
+            or object:IsA("Fire")
+            or object:IsA("Sparkles")
+            or object:IsA("Highlight")
+            or object:IsA("PointLight")
+            or object:IsA("SpotLight")
+            or object:IsA("SurfaceLight")
+        then
+            local ok, enabled = pcall(function()
+                return object.Enabled
+            end)
+            if ok then
+                local state = remember(object)
+                if state.EnabledCaptured ~= true then
+                    state.Enabled = enabled
+                    state.EnabledCaptured = true
+                end
+                pcall(function()
+                    object.Enabled = false
+                end)
             end
         end
     end
 
-    -- Keep own-garden geometry but strip textures/effects. Everything else uses
-    -- the original aggressive material simplification.
-    for _, item in ipairs(Workspace:GetDescendants()) do
-        if isInsideCleanupOwnedPlot(item, ownedPlot) then
-            stripOwnedGardenVisual(item)
-        else
-            if item:IsA("BasePart") then
-                item.Material = Enum.Material.SmoothPlastic
-                item.Color = Color3.fromRGB(180, 180, 200)
-                item.Reflectance = 0
-            elseif item:IsA("Texture") or item:IsA("Decal") or item:IsA("SurfaceAppearance")
-                or item:IsA("ParticleEmitter") or item:IsA("Trail") or item:IsA("Beam") then
-                pcall(function() item:Destroy() end)
-            elseif item:IsA("MeshPart") then
-                pcall(function() item.TextureID = "" end)
-            elseif item:IsA("SpecialMesh") then
-                pcall(function() item.TextureId = "" end)
+    local function restoreVisuals()
+        for object, state in pairs(originals) do
+            if object and object.Parent and type(state) == "table" then
+                if object:IsA("BasePart") then
+                    if state.Material ~= nil then
+                        pcall(function() object.Material = state.Material end)
+                    end
+                    if state.MaterialVariantCaptured == true then
+                        pcall(function()
+                            object.MaterialVariant = state.MaterialVariant or ""
+                        end)
+                    end
+                    if state.Reflectance ~= nil then
+                        pcall(function() object.Reflectance = state.Reflectance end)
+                    end
+                    if object:IsA("MeshPart") and state.TextureIDCaptured == true then
+                        pcall(function() object.TextureID = state.TextureID or "" end)
+                    end
+                elseif object:IsA("Decal") or object:IsA("Texture") then
+                    if state.Transparency ~= nil then
+                        pcall(function() object.Transparency = state.Transparency end)
+                    end
+                elseif object:IsA("SpecialMesh") then
+                    if state.TextureIdCaptured == true then
+                        pcall(function() object.TextureId = state.TextureId or "" end)
+                    end
+                elseif object:IsA("SurfaceAppearance") then
+                    if state.SurfaceAppearanceCaptured == true then
+                        pcall(function() object.ColorMap = state.ColorMap or "" end)
+                        pcall(function() object.MetalnessMap = state.MetalnessMap or "" end)
+                        pcall(function() object.NormalMap = state.NormalMap or "" end)
+                        pcall(function() object.RoughnessMap = state.RoughnessMap or "" end)
+                    end
+                elseif state.EnabledCaptured == true then
+                    pcall(function() object.Enabled = state.Enabled end)
+                end
             end
+        end
+
+        table.clear(originals)
+    end
+
+    local function disconnectWatcher()
+        if descendantAddedConnection then
+            pcall(function()
+                descendantAddedConnection:Disconnect()
+            end)
+            descendantAddedConnection = nil
         end
     end
 
-    Lighting.GlobalShadows = false
-    Lighting.Brightness = 2
-    Lighting.ClockTime = 12
-    Lighting.FogEnd = 100000
-end
+    local function setCleanupEnabled(enabled)
+        enabled = enabled == true
 
-local function setCleanupEnabled(enabled)
-    cleanupEnabled = enabled == true
-    if cleanupEnabled then
-        -- PERFORMANCE: remove purely decorative ScoopHub stars as part of
-        -- Low Graphics. This does not affect buttons, text, panels, automation,
-        -- notifications, or any game logic.
+        if cleanupEnabled == enabled then
+            return true
+        end
+
+        cleanupEnabled = enabled
+        runId += 1
+        local thisRun = runId
+        disconnectWatcher()
+
+        if not cleanupEnabled then
+            restoreVisuals()
+            return true
+        end
+
+        -- ScoopHub-only decoration can still be removed once for extra UI FPS.
         DisableDecorativeStars()
-        applyLowCPU()
+
+        -- Initial one-time pass. Nothing is destroyed and no garden is removed.
+        local descendants = Workspace:GetDescendants()
+        for index = 1, #descendants do
+            if not cleanupEnabled or runId ~= thisRun then
+                return false
+            end
+            stripVisuals(descendants[index])
+        end
+
+        -- Apply the same lightweight stripping to newly replicated objects.
+        descendantAddedConnection = Workspace.DescendantAdded:Connect(function(object)
+            if cleanupEnabled and runId == thisRun then
+                stripVisuals(object)
+            end
+        end)
+
+        return true
     end
-end
-
-
 
     return {
         SetLowGraphics = setCleanupEnabled,
@@ -364,7 +478,7 @@ local function mountCleanup(B)
         end)
     end
 
-    local CleanupCard = card(1, 5, "CLEANUP", "FPS cleanup. Your garden stays visible as plain colors.")
+    local CleanupCard = card(1, 5, "CLEANUP", "Low graphics: strips textures/VFX only. Keeps all gardens and objects.")
     local CleanupToggle = makeToggle(CleanupCard, cleanupInitial, function(enabled)
         if _G.ScoopHubAutoBuyPetAPI and _G.ScoopHubAutoBuyPetAPI.SetCleanup then
             pcall(function()
