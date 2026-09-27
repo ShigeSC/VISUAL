@@ -1,0 +1,58 @@
+SCOOPHUB V2.2 - FULL MODULAR BUILD
+
+SIDEBAR TAB ORDER IS PRESERVED EXACTLY:
+1. USER          Order=10
+2. AUTOMATION    Order=20
+3. GARDEN        Order=30
+4. SHOP          Order=40
+5. MAIL          Order=50
+6. AUTO BUY PET  Order=60
+7. INVENTORY     Order=70
+8. CONFIG        Order=80
+9. MISC          Order=90
+
+PUBLIC DELIVERY REPO EXPECTED BY MAIN:
+https://raw.githubusercontent.com/ShigeSC/VISUAL/refs/heads/main/
+
+EXISTING:
+- gag2.lua -> Visual features (Low Graphics / ESP / Remove Other Gardens)
+
+NEW FILES - OBFUSCATE EACH READABLE FILE SEPARATELY, THEN UPLOAD THE OBFUSCATED OUTPUT USING THESE NAMES:
+- gag2pet_READABLE_OBFUSCATE_THIS.lua       -> gag2pet.lua
+- gag2mail_READABLE_OBFUSCATE_THIS.lua      -> gag2mail.lua
+- gag2auto_READABLE_OBFUSCATE_THIS.lua      -> gag2auto.lua
+- gag2garden_READABLE_OBFUSCATE_THIS.lua    -> gag2garden.lua
+- gag2shop_READABLE_OBFUSCATE_THIS.lua      -> gag2shop.lua
+- gag2inventory_READABLE_OBFUSCATE_THIS.lua -> gag2inventory.lua
+
+OLD gag2s.lua:
+- No longer used by the FULL modular MAIN.
+- You can leave it in the repo during testing; the new MAIN will not request it.
+
+OBFUSCATE MAIN LAST:
+- ScoopHub_V2.2_FULL_MODULAR_MAIN_READY_TO_OBFUSCATE.lua
+
+READABLE SIZES BEFORE OBFUSCATION:
+- MAIN:       183,031 chars / 183,046 bytes
+- Auto Buy:   191,420 chars / 191,446 bytes
+- Mail:       192,879 chars / 192,920 bytes
+- Automation: 179,589 chars / 179,625 bytes
+- Garden:      82,580 chars /  82,592 bytes
+- Shop:       108,972 chars / 109,072 bytes
+- Inventory:  105,129 chars / 105,153 bytes
+- Visuals:     ~94 KB (existing gag2 source)
+
+Every NEW MoonVeil input is below 200,000 characters.
+
+UPLOAD / BUILD ORDER:
+1. Keep/update gag2.lua.
+2. Obfuscate + upload gag2pet.lua.
+3. Obfuscate + upload gag2mail.lua.
+4. Obfuscate + upload gag2auto.lua.
+5. Obfuscate + upload gag2garden.lua.
+6. Obfuscate + upload gag2shop.lua.
+7. Obfuscate + upload gag2inventory.lua.
+8. Obfuscate ScoopHub_V2.2_FULL_MODULAR_MAIN_READY_TO_OBFUSCATE.lua.
+9. Deploy the obfuscated MAIN as the script users execute.
+
+The MAIN creates all sidebar tabs itself before remote modules load. Remote modules only populate those already-created tabs, so moving code does not change sidebar order or positions.
