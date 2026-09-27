@@ -6,6 +6,7 @@ local Module = {}
 
 local function createLowGraphics(B)
     local Workspace = game:GetService("Workspace")
+    local LP = B.LP or game:GetService("Players").LocalPlayer
     local DisableDecorativeStars = type(B.DisableDecorativeStars) == "function"
         and B.DisableDecorativeStars
         or function() end
@@ -28,8 +29,24 @@ local function createLowGraphics(B)
         return state
     end
 
+    local function isLocalPlayerObject(object)
+        local character = LP and LP.Character
+        if not character or not object then
+            return false
+        end
+
+        return object == character or object:IsDescendantOf(character)
+    end
+
     local function stripVisuals(object)
         if not cleanupEnabled or not object or not object.Parent then
+            return
+        end
+
+        -- Never touch the local player's character. This preserves the avatar's
+        -- body/accessory textures, materials, SurfaceAppearance maps, decals,
+        -- trails, particles, lights, and anything else attached to the character.
+        if isLocalPlayerObject(object) then
             return
         end
 
